@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waste Data Visualization</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://unpkg.com/papaparse@latest/papaparse.min.js"></script>
+  <style>
+    p {
+    text-align: justify;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    .container {
+      display: flex;
+      height: 100%;
+      width: 100%;
+    }
+    .part1 {
+      width: 70%;
+      min-width: 1200px;
+      background-color: #f0f0f0;
+      padding: 10px;
+      box-sizing: border-box;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+    .part1 h2 {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      margin: 0;
+      font-size: 24px;
+      color: #333;
+      text-align: center;
+      z-index: 20;
+    }
+    .right-column {
+      width: 30%;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+    .part2 {
+      height: calc(100% - 350px);
+      padding: 10px;
+      box-sizing: border-box;
+      background-color: #F0F0F0;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .part3 {
+      height: 350px;
+      padding: 10px;
+      box-sizing: border-box;
+      background-color: #F0F0F0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow: hidden;
+      border: 1px solid black;
+    }
+    .part3 svg {
+      max-width: 100%;
+      height: auto;
+    }
+    .part3 text {
+      fill: black;
+      font-size: 12px;
+    }
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    #replay, #pause, #play {
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    #replay {
+      background-color: #4CAF50; /* Green for Replay */
+    }
+    #replay:hover {
+      background-color: #45a049;
+    }
+    #pause {
+      background-color: #FF9800; /* Orange for Pause */
+    }
+    #pause:hover {
+      background-color: #e68900;
+    }
+    #play {
+      background-color: #2196F3; /* Blue for Play */
+    }
+    #play:hover {
+      background-color: #1e88e5;
+    }
+    #error-message-part1, #error-message-part3 {
+      color: red;
+      font-size: 14px;
+      text-align: center;
+    }
+    .button-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      z-index: 10;
+    }
+    .button-container button {
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      color: white;
+    }
+    #waste-button {
+      background-color: #007BFF;
+    }
+    #waste-button:hover {
+      background-color: #0056b3;
+    }
+    #back-button {
+      background-color: #dc3545;
+      display: none;
+    }
+    #back-button:hover {
+      background-color: #c82333;
+    }
+    .graph-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .graph {
+      background-color: #f9f9f9;
+      border: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px;
+      box-sizing: border-box;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    #g1 {
+      width: 479px;
+      height: 547px;
+      margin-right: 40px;
+    }
+    #g2 {
+      width: 479px;
+      height: 547px;
+      margin-left: 60px;
+    }
+    #g1.visible, #g2.visible {
+      opacity: 1;
+    }
+    .graph svg {
+      width: 100%;
+      height: 100%;
+    }
+    .graph h3 {
+      margin: 5px 0;
+      font-size: 16px;
+      text-align: center;
+    }
+    .tooltip-part1, .tooltip-part3 {
+      position: absolute;
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .blink {
+      animation: blink 1s infinite;
+    }
+    @keyframes blink {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="part1">
+      <h2>BREAKING DOWN SCU’S WASTE MANAGEMENT COSTS</h2>
+      <div class="button-container">
+        <button id="waste-button">Waste</button>
+        <button id="back-button">Back</button>
+        <div id="error-message-part1"></div>
+      </div>
+      <div class="graph-container">
+        <div class="graph" id="g1">
+          <h3>Spending Distribution Across Waste Categories</h3>
+          <svg id="g1-svg"></svg>
+        </div>
+        <div class="graph" id="g2">
+          <h3>Concentrated Risk and Cost Overdependence</h3>
+          <svg id="g2-svg"></svg>
+        </div>
+      </div>
+    </div>
+    <div class="right-column">
+      <div class="part2">
+        <h3>FROM MESS TO MESSAGE: WHAT SCU’S WASTE DATA REALLY TELLS US</h3>
+        <p>I started this by first taking the dataset and analyzing it. I found several issues: values were incorrectly placed in wrong columns, multiple missing values existed, and field values lacked consistent formatting. Also, there were duplicated fields with minor differences in naming, such as “Compost”, “compost” and “Other”, “Others”.</p>
+        <p>To clean the data, I first dropped rows with multiple missing values. Since my analysis was focused on cost and category, I kept only the relevant fields and removed the rest. I then corrected misaligned values, standardized the data types for each column, and merged fields with inconsistent naming. For the “Vendor” column, I filled missing values by cross-referencing existing values in the “Category,” “Material Type,” and “Vendor” fields, ensuring logical consistency across the dataset. Where discrepancies existed, I made sure that the “Material Type” was consistently assigned to the correct vendor throughout the data.</p>
+        <p>Once the data was cleaned, I went to create a html page first I created a general page and divided it into 3 parts where part 1- 70% and part 2&3 were on top of each other in the remaining 30% with part 2 being 60% and part 3 being 40%. I decided that I would be doing a time-based visualization in part 3 and in part 2 I would be displaying my story. I titled Part 2 as “FROM MESS TO MESSAGE: WHAT SCU’S WASTE DATA REALLY TELLS US.” I initially hardcoded sample text to set up the layout. My main goal was to demonstrate how SCU’s waste management costs are distributed, and which areas are the most financially impactful. Essentially, I approached this project as a cost analysis exercise.</p>
+        <p>Once the structure got fixed, I moved on to Part 3, “Waste Cost Evolution Over Time.” I began with a simple bar chart to get the correct dimensions, then changed into a "Bar Chart Race" chart format, referencing examples from D3.js but modifying and enhancing it extensively. I assigned colors based on ranking rather than specific categories — Red for the top position, Blue for second, Purple for third, and Green for fourth — regardless of which category occupied that rank. I added a Replay button to restart the animation, along with Pause and Play buttons. I added a year clock to the bottom-right to indicate the current year during the animation. This visualization, based on “Cost,” “Year,” and “Category,” effectively shows how SCU’s waste management costs evolved over the years and which waste types became more dominant over time.</p>
+        <p>The primary focus of the page is Part 1, “BREAKING DOWN SCU’S WASTE MANAGEMENT COSTS.” I designed it to be interactive, controlled by a single “Waste” button. When clicked, two key charts appear on either side of the button, and a “Back” button becomes available to reset the layout to its initial state.</p>
+        <p>The first chart, “Spending Distribution Across Waste Categories,” is a donut chart that appears interactively when the user hovers over it. I assigned different colors to each waste category, with Red representing the highest cost and Green the lowest. From this chart, I found that Landfill ($849k) and Recycling ($839k) were the most dominant categories, together accounting for nearly 70% of SCU’s total waste management spend. Which gives the feedback that we should be reducing the landfill waste and improving recycling Efficiency. Compost ($642k) costs were also high, indicating that SCU’s composting operations may not be optimized. The Reuse($117k) is the least costing category, but this could be used to reduce what ends in Landfill and Recycling by improving the Reuse efforts and SCU could save much on waste disposal and improve sustainability. </p>
+        <p>The second chart, “Concentrated Risk and Cost Overdependence,” is an improvised bar chart showing vendor-wise total waste management costs, arranged from highest to lowest. In this visualization, it is evident that Mission Trail is by far the dominant vendor SCU relies upon for waste disposal, far exceeding all other vendors. This heavy reliance poses a significant operational and financial risk. A recommended strategy would be to renegotiate terms with Mission Trail or explore alternative vendors to diversify SCU’s vendor base. If Mission Trail increases the price, then SCU has no other option than facing substantial impacts.</p>
+      </div>
+      <div class="part3">
+        <div class="button-group">
+          <button id="replay">Replay</button>
+          <button id="pause">Pause</button>
+          <button id="play">Play</button>
+        </div>
+        <div id="chart"></div>
+        <div id="error-message-part3"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Part 1: Data and Functions
+    let globalDataPart1 = [];
+    const expectedColumnsPart1 = ["Year", "Category", "Cost", "Vendor"];
+
+    async function loadAndProcessDataForPart1() {
+      try {
+        const response = await fetch("assign2_25S_wastedata_final_clean.csv");
+        if (!response.ok) throw new Error(`Failed to load CSV: ${response.statusText}`);
+        const csv = await response.text();
+        return new Promise((resolve, reject) => {
+          Papa.parse(csv, {
+            header: true,
+            skipEmptyLines: true,
+            dynamicTyping: false,
+            transform: (value, header) => {
+              if (header === "Cost") {
+                return value.replace(/\$|,/g, "").trim();
+              }
+              return value.trim().replace(/^"|"$/g, "");
+            },
+            complete: (results) => {
+              const csvColumns = results.meta.fields || [];
+              const missingColumns = expectedColumnsPart1.filter(col => !csvColumns.includes(col));
+              if (missingColumns.length > 0) {
+                throw new Error(`Missing required columns in CSV for part1: ${missingColumns.join(", ")}`);
+              }
+
+              globalDataPart1 = results.data.map(row => {
+                let cost = parseFloat(row["Cost"]);
+                let category = row["Category"];
+                if (category.toLowerCase() === "compost") {
+                  category = "Compost";
+                }
+                return {
+                  year: +row["Year"],
+                  category: category,
+                  cost: isNaN(cost) ? 0 : cost,
+                  vendor: row["Vendor"]
+                };
+              }).filter(d => !isNaN(d.year) && d.category && !isNaN(d.cost) && d.vendor);
+
+              if (globalDataPart1.length === 0) {
+                throw new Error("No valid data after filtering for part1.");
+              }
+              console.log("Part1 data loaded:", globalDataPart1.slice(0, 3));
+              resolve(globalDataPart1);
+            },
+            error: (err) => reject(new Error(`PapaParse error in part1: ${err.message}`))
+          });
+        });
+      } catch (err) {
+        throw new Error(`Error loading CSV for part1: ${err.message}`);
+      }
+    }
+
+    async function initPart1() {
+      try {
+        await loadAndProcessDataForPart1();
+        d3.select("#waste-button").on("click", showGraphs);
+        d3.select("#back-button").on("click", hideGraphs);
+      } catch (err) {
+        console.error("Part 1 init error:", err.message);
+        d3.select("#error-message-part1").text(`Part 1 Error: ${err.message}`);
+        d3.select("#waste-button")
+          .style("background-color", "#dc3545")
+          .text("Error: Check Console");
+      }
+    }
+
+    function showGraphs() {
+      console.log("showGraphs called");
+      d3.select("#g1").classed("visible", true);
+      d3.select("#g2").classed("visible", true);
+      d3.select("#back-button").style("display", "block");
+
+      // g1: Donut Chart (Cost by Category)
+      const g1Svg = d3.select("#g1-svg")
+        .attr("width", 450)
+        .attr("height", 450);
+
+      g1Svg.selectAll("*").remove();
+
+      const categoryData = d3.rollup(
+        globalDataPart1,
+        v => d3.sum(v, d => d.cost),
+        d => d.category
+      );
+
+      let data = Array.from(categoryData, ([name, value]) => ({ name, value }))
+        .filter(d => d.value > 0);
+
+      console.log("g1 data before sorting:", data);
+
+      // Define the desired order
+      const categoryOrder = ["Landfill", "Recycle", "Compost", "Reuse"];
+      // Sort data according to the desired order
+      data.sort((a, b) => {
+        const aIndex = categoryOrder.indexOf(a.name);
+        const bIndex = categoryOrder.indexOf(b.name);
+        return aIndex - bIndex;
+      });
+
+      console.log("g1 data after sorting:", data);
+
+      if (data.length === 0) {
+        g1Svg.append("text")
+          .attr("x", 225)
+          .attr("y", 225)
+          .attr("text-anchor", "middle")
+          .text("No cost data available");
+        return;
+      }
+
+      const width = 450;
+      const height = 450;
+      const radius = Math.min(width, height) / 2 - 50;
+
+      const arc = d3.arc()
+        .innerRadius(radius * 0.67)
+        .outerRadius(radius);
+
+      const labelArc = d3.arc()
+        .innerRadius(radius * 1.2)
+        .outerRadius(radius * 1.2);
+
+      const pie = d3.pie()
+        .padAngle(1 / radius)
+        .sort(null) // Sorting is handled manually above
+        .value(d => d.value);
+
+      // Define custom colors
+      const color = d3.scaleOrdinal()
+        .domain(["Landfill", "Recycle", "Compost", "Reuse"])
+        .range(["#FF0000", "#00008B", "#800080", "#90EE90"]);
+
+      const g = g1Svg.append("g")
+        .attr("transform", `translate(${width / 2},${height / 2})`);
+
+      g.selectAll("path")
+        .data(pie(data))
+        .join("path")
+        .attr("fill", d => color(d.data.name))
+        .attr("d", arc)
+        .attr("opacity", 0)
+        .on("mouseover", function(event, d) {
+          d3.select(this).transition().duration(200).attr("opacity", 0.8);
+        })
+        .on("mouseout", function() {
+          d3.select(this).transition().duration(200).attr("opacity", 1);
+        })
+        .append("title")
+        .text(d => `${d.data.name}: ${d.data.value.toLocaleString("en-US")}`)
+        .transition()
+        .duration(800)
+        .ease(d3.easeLinear)
+        .attr("opacity", 1)
+        .on("end", function(d) {
+          // Apply blinking to Landfill segment after transition
+          if (d.data.name === "Landfill") {
+            d3.select(this).classed("blink", true);
+          }
+        });
+
+      g.append("g")
+        .attr("font-family", "sans-serif")
+        .attr("font-size", 10)
+        .attr("text-anchor", "middle")
+        .selectAll("text")
+        .data(pie(data))
+        .join("text")
+        .attr("transform", d => `translate(${labelArc.centroid(d)})`)
+        .attr("opacity", 0)
+        .call(text => text.append("tspan")
+          .attr("y", "-0.4em")
+          .attr("font-weight", "bold")
+          .text(d => d.data.name)) // Fixed: Changed d.name to d.data.name
+        .call(text => text.filter(d => (d.endAngle - d.startAngle) > 0.2).append("tspan")
+          .attr("x", 0)
+          .attr("y", "0.7em")
+          .attr("fill-opacity", 0.7)
+          .text(d => d.data.value.toLocaleString("en-US")))
+        .transition()
+        .duration(800)
+        .ease(d3.easeLinear)
+        .attr("opacity", 1);
+
+      // g2: Bar Chart (Total Cost by Vendor)
+      const g2Svg = d3.select("#g2-svg")
+        .attr("width", 480)
+        .attr("height", 480);
+
+      g2Svg.selectAll("*").remove();
+
+      const g2Margin = {top: 30, right: 30, bottom: 80, left: 80};
+      const g2Width = 480 - g2Margin.left - g2Margin.right;
+      const g2Height = 480 - g2Margin.top - g2Margin.bottom;
+
+      const g2 = g2Svg.append("g")
+        .attr("transform", `translate(${g2Margin.left},${g2Margin.top})`);
+
+      // Aggregate total cost by vendor
+      const vendorData = d3.rollup(
+        globalDataPart1,
+        v => d3.sum(v, d => d.cost),
+        d => d.vendor
+      );
+
+      let data2 = Array.from(vendorData, ([vendor, cost]) => ({ vendor, cost }))
+        .filter(d => d.cost > 0);
+
+      console.log("g2 data before sorting:", data2);
+
+      if (data2.length === 0) {
+        g2.append("text")
+          .attr("x", g2Width / 2)
+          .attr("y", g2Height / 2)
+          .attr("text-anchor", "middle")
+          .text("No vendor or cost data available");
+        return;
+      }
+
+      // Sort data2 by cost in descending order (max to min, left to right)
+      data2.sort((a, b) => d3.descending(a.cost, b.cost));
+
+      console.log("g2 data after sorting by cost (descending):", data2);
+
+      // Define scales with the sorted data
+      const x2 = d3.scaleBand()
+        .domain(data2.map(d => d.vendor))
+        .range([0, g2Width])
+        .padding(0.1);
+
+      const y2 = d3.scaleLinear()
+        .domain([0, d3.max(data2, d => d.cost) || 1])
+        .range([g2Height, 0])
+        .nice();
+
+      console.log("g2 y-axis domain:", y2.domain());
+
+      // Define custom colors for vendors
+      const vendorColors = d3.scaleOrdinal()
+        .domain([
+          "Mission Trail",
+          "Others",
+          "Caraustar",
+          "Food Recovery Network",
+          "Corodata",
+          "ECS Refining",
+          "Sims",
+          "Green Waste"
+        ])
+        .range([
+          "#8B0000", // Mission Trail: Dark Red
+          "#00008B", // Others: Dark Blue
+          "#800080", // Caraustar: Purple
+          "#FFA500", // Food Recovery Network: Orange
+          "#008000", // Corodata: Green
+          "#FF7F50", // Ecs Refining: Coral
+          "#ADD8E6", // Sims: Light Blue
+          "#90EE90"  // Green Waste: Light Green
+        ])
+        .unknown("#808080"); // Default color (gray) for unknown vendors
+
+      // Create gradients for each bar (dark to light from top to bottom)
+      const defs = g2Svg.append("defs");
+      data2.forEach(d => {
+        const baseColor = vendorColors(d.vendor); // Dark color
+        const lightColor = d3.interpolateHsl(baseColor, "#ffffff")(0.5); // Lighten by 50%
+        const gradient = defs.append("linearGradient")
+          .attr("id", `gradient-${d.vendor.replace(/\s+/g, '-')}`)
+          .attr("x1", "0%")
+          .attr("y1", "0%") // Top
+          .attr("x2", "0%")
+          .attr("y2", "100%"); // Bottom
+        gradient.append("stop")
+          .attr("offset", "0%")
+          .attr("stop-color", baseColor); // Dark at the top
+        gradient.append("stop")
+          .attr("offset", "160%")
+          .attr("stop-color", lightColor); // Light at the bottom
+      });
+
+      // Draw bars
+      g2.selectAll("rect")
+        .data(data2)
+        .enter()
+        .append("rect")
+        .attr("x", d => x2(d.vendor))
+        .attr("y", d => y2(d.cost))
+        .attr("width", x2.bandwidth())
+        .attr("height", d => g2Height - y2(d.cost))
+        .attr("fill", d => `url(#gradient-${d.vendor.replace(/\s+/g, '-')})`)
+        .attr("opacity", 0)
+        .on("mouseover", function(event, d) {
+          const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip-part1")
+            .style("opacity", 0);
+          tooltip.transition()
+            .duration(200)
+            .style("opacity", 0.9);
+          tooltip.html(`Vendor: ${d.vendor}<br>Total Cost: ${d.cost.toLocaleString("en-US")}`)
+            .style("left", (event.pageX + 10) + "px")
+            .style("top", (event.pageY - 28) + "px");
+        })
+        .on("mouseout", function() {
+          d3.selectAll(".tooltip-part1")
+            .transition()
+            .duration(500)
+            .style("opacity", 0)
+            .remove();
+        })
+        .transition()
+        .duration(800)
+        .ease(d3.easeLinear)
+        .attr("opacity", 1);
+
+      // Add axes
+      g2.append("g")
+        .attr("transform", `translate(0,${g2Height})`)
+        .call(d3.axisBottom(x2))
+        .selectAll("text")
+        .style("text-anchor", "end")
+        .attr("dx", "-1em")
+        .attr("dy", "0.5em")
+        .attr("transform", "rotate(-45)");
+
+      g2.append("g")
+        .call(d3.axisLeft(y2).ticks(6).tickFormat(d3.format("~f")));
+
+      // Add axis labels
+      g2.append("text")
+        .attr("x", g2Width / 2)
+        .attr("y", g2Height + 80)
+        .attr("text-anchor", "middle")
+        .attr("font-size", "12px")
+        .text("Vendor");
+
+      g2.append("text")
+        .attr("x", -g2Height / 2)
+        .attr("y", -60)
+        .attr("text-anchor", "middle")
+        .attr("font-size", "12px")
+        .attr("transform", "rotate(-90)")
+        .text("Total Cost");
+    }
+
+    function hideGraphs() {
+      console.log("hideGraphs called");
+      d3.select("#g1").classed("visible", false);
+      d3.select("#g2").classed("visible", false);
+      d3.select("#back-button").style("display", "none");
+      d3.select("#g1-svg").selectAll("*").remove();
+      d3.select("#g2-svg").selectAll("*").remove();
+      d3.selectAll(".tooltip-part1").remove();
+    }
+
+    // Part 3: Data and Functions
+    let globalDataPart3 = [];
+    const width = 460;
+    const height = 300;
+    const marginTop = 20;
+    const marginRight = 6;
+    const marginBottom = 6;
+    const marginLeft = 0;
+    const barSize = 40;
+    const n = 5;
+    const duration = 250;
+    const k = 10;
+
+    async function loadAndProcessDataForPart3() {
+      try {
+        const response = await fetch("assign2_25S_wastedata_final_clean.csv");
+        if (!response.ok) throw new Error(`Failed to load CSV: ${response.statusText}`);
+        const csv = await response.text();
+        return new Promise((resolve, reject) => {
+          Papa.parse(csv, {
+            header: true,
+            skipEmptyLines: true,
+            dynamicTyping: false,
+            transform: (value, header) => {
+              if (header === "Cost") {
+                return value.replace(/\$|,/g, "").trim();
+              }
+              return value.trim().replace(/^"|"$/g, "");
+            },
+            complete: (results) => {
+              const csvColumns = results.meta.fields || [];
+              const missingColumns = ["Year", "Category", "Cost"].filter(col => !csvColumns.includes(col));
+              if (missingColumns.length > 0) {
+                throw new Error(`Missing required columns in CSV for part3: ${missingColumns.join(", ")}`);
+              }
+
+              globalDataPart3 = results.data.map(row => {
+                let cost = parseFloat(row["Cost"]);
+                let category = row["Category"];
+                if (category.toLowerCase() === "compost") {
+                  category = "Compost";
+                }
+                return {
+                  year: +row["Year"],
+                  category: category,
+                  cost: isNaN(cost) ? 0 : cost
+                };
+              }).filter(d => !isNaN(d.year) && d.category && !isNaN(d.cost));
+
+              if (globalDataPart3.length === 0) {
+                throw new Error("No valid data after filtering for part3.");
+              }
+
+              const categoryTotals = d3.rollup(
+                globalDataPart3,
+                v => d3.sum(v, d => d.cost),
+                d => d.category
+              );
+              const topCategories = Array.from(categoryTotals)
+                .sort((a, b) => d3.descending(a[1], b[1]))
+                .slice(0, 5)
+                .map(([category]) => category);
+
+              if (topCategories.length === 0) {
+                throw new Error("No categories found in CSV for part3.");
+              }
+
+              const filteredData = globalDataPart3.filter(d => topCategories.includes(d.category));
+
+              const aggregated = d3.rollup(
+                filteredData,
+                v => d3.sum(v, d => d.cost),
+                d => d.year,
+                d => d.category
+              );
+
+              const datevalues = Array.from(aggregated, ([year, categories]) => [
+                new Date(year, 0, 1),
+                new Map(Array.from(categories, ([category, cost]) => [category, cost]))
+              ]).sort(([a], [b]) => d3.ascending(a, b));
+
+              console.log("Part3 datevalues:", datevalues);
+              resolve(datevalues);
+            },
+            error: (err) => reject(new Error(`PapaParse error in part3: ${err.message}`))
+          });
+        });
+      } catch (err) {
+        throw new Error(`Error loading CSV for part3: ${err.message}`);
+      }
+    }
+
+    function rank(names, value) {
+      const data = Array.from(names, name => ({name, value: value(name)}));
+      data.sort((a, b) => d3.descending(a.value, b.value));
+      for (let i = 0; i < data.length; ++i) data[i].rank = Math.min(n, i);
+      return data;
+    }
+
+    function generateKeyframes(datevalues, names) {
+      const keyframes = [];
+      let ka, a, kb, b;
+      for ([[ka, a], [kb, b]] of d3.pairs(datevalues)) {
+        for (let i = 0; i < k; ++i) {
+          const t = i / k;
+          keyframes.push([
+            new Date(ka * (1 - t) + kb * t),
+            rank(names, name => (a.get(name) || 0) * (1 - t) + (b.get(name) || 0) * t)
+          ]);
+        }
+      }
+      keyframes.push([new Date(kb), rank(names, name => b.get(name) || 0)]);
+      console.log("Part3 keyframes:", keyframes);
+      return keyframes;
+    }
+
+    async function createBarChartRace() {
+      try {
+        const datevalues = await loadAndProcessDataForPart3();
+        if (!datevalues || datevalues.length === 0) {
+          throw new Error("No data loaded for part3.");
+        }
+
+        const names = new Set(datevalues.flatMap(([_, data]) => Array.from(data.keys())));
+        const keyframes = generateKeyframes(datevalues, names);
+
+        if (keyframes.length === 0) {
+          throw new Error("No keyframes generated for part3.");
+        }
+
+        const nameframes = d3.groups(keyframes.flatMap(([, data]) => data), d => d.name);
+        const prev = new Map(nameframes.flatMap(([, data]) => d3.pairs(data, (a, b) => [b, a])));
+        const next = new Map(nameframes.flatMap(([, data]) => d3.pairs(data)));
+
+        let running = true;
+        let currentFrame = 0;
+        let stop = false; // Flag to control stopping the animation loop
+
+        // Function to create and return the SVG and update functions
+        function initializeChart() {
+          // Clear any existing SVG content
+          d3.select("#chart").selectAll("*").remove();
+
+          const svg = d3.select("#chart").append("svg")
+            .attr("viewBox", [0, 0, width, height])
+            .attr("width", width)
+            .attr("height", height)
+            .attr("style", "max-width: 100%; height: auto;");
+
+          const x = d3.scaleLinear([0, 1], [marginLeft, width - marginRight]);
+          const y = d3.scaleBand()
+            .domain(d3.range(n + 1))
+            .rangeRound([marginTop, marginTop + barSize * (n + 1 + 0.1)])
+            .padding(0.1);
+
+          // Define pastel colors based on rank (0 is highest, 4 is lowest)
+          const rankColors = d3.scaleOrdinal()
+            .domain([0, 1, 2, 3, 4])
+            .range([
+              "#FF9999", // Rank 0 (highest): Pastel Red
+              "#99CCFF", // Rank 1: Pastel Blue
+              "#CC99FF", // Rank 2: Pastel Purple
+              "#99FFCC", // Rank 3: Pastel Light Green
+              "#D3D3D3"  // Rank 4: Pastel Gray (default for 5th)
+            ]);
+
+          const formatNumber = d3.format("~f");
+          const formatDate = d3.utcFormat("%Y");
+
+          function bars(svg) {
+            let bar = svg.append("g")
+              .attr("fill-opacity", 0.6)
+              .selectAll("rect");
+
+            return ([date, data], transition) => {
+              bar = bar
+                .data(data.slice(0, n), d => d.name)
+                .join(
+                  enter => enter.append("rect")
+                    .attr("fill", d => rankColors(d.rank))
+                    .attr("height", y.bandwidth())
+                    .attr("x", x(0))
+                    .attr("y", d => y((prev.get(d) || d).rank))
+                    .attr("width", d => x((prev.get(d) || d).value) - x(0)),
+                  update => update
+                    .attr("fill", d => rankColors(d.rank)),
+                  exit => exit.transition(transition).remove()
+                    .attr("y", d => y((next.get(d) || d).rank))
+                    .attr("width", d => x((next.get(d) || d).value) - x(0))
+                )
+                .call(bar => bar.transition(transition)
+                  .attr("y", d => y(d.rank))
+                  .attr("width", d => x(d.value) - x(0)));
+            };
+          }
+
+          function labels(svg) {
+            let label = svg.append("g")
+              .style("font", "bold 12px sans-serif")
+              .style("font-variant-numeric", "tabular-nums")
+              .attr("text-anchor", "end")
+              .selectAll("text");
+
+            return ([date, data], transition) => {
+              label = label
+                .data(data.slice(0, n), d => d.name)
+                .join(
+                  enter => enter.append("text")
+                    .attr("transform", d => `translate(${x((prev.get(d) || d).value)},${y((prev.get(d) || d).rank)})`)
+                    .attr("y", y.bandwidth() / 2)
+                    .attr("x", -6)
+                    .attr("dy", "-0.25em")
+                    .text(d => d.name)
+                    .call(text => text.append("tspan")
+                      .attr("fill-opacity", 0.7)
+                      .attr("font-weight", "normal")
+                      .attr("x", -6)
+                      .attr("dy", "1.2em")),
+                  update => update,
+                  exit => exit.transition(transition).remove()
+                    .attr("transform", d => `translate(${x((next.get(d) || d).value)},${y((next.get(d) || d).rank)})`)
+                    .call(g => g.select("tspan").tween("text", d => textTween(d.value, (next.get(d) || d).value)))
+                )
+                .call(bar => bar.transition(transition)
+                  .attr("transform", d => `translate(${x(d.value)},${y(d.rank)})`)
+                  .call(g => g.select("tspan").tween("text", d => textTween((prev.get(d) || d).value, d.value))));
+            };
+
+            function textTween(a, b) {
+              const i = d3.interpolateNumber(a, b);
+              return function(t) {
+                this.textContent = formatNumber(i(t));
+              };
+            }
+          }
+
+          function axis(svg) {
+            const g = svg.append("g")
+              .attr("transform", `translate(0,${marginTop})`);
+
+            const axis = d3.axisTop(x)
+              .ticks(width / 160)
+              .tickSizeOuter(0)
+              .tickSizeInner(-barSize * (n + y.padding()))
+              .tickFormat(d3.format("~f"));
+
+            return (_, transition) => {
+              g.transition(transition).call(axis);
+              g.select(".tick:first-of-type text").remove();
+              g.selectAll(".tick:not(:first-of-type) line").attr("stroke", "white");
+              g.select(".domain").remove();
+            };
+          }
+
+          function ticker(svg) {
+            const now = svg.append("text")
+              .style("font", "bold 30px sans-serif")
+              .style("font-variant-numeric", "tabular-nums")
+              .attr("text-anchor", "end")
+              .attr("x", width - 6)
+              .attr("y", height - 20)
+              .attr("dy", "0.32em")
+              .text(formatDate(keyframes[0][0]));
+
+            return ([date], transition) => {
+              transition.end().then(() => now.text(formatDate(date)));
+            };
+          }
+
+          function chartTitle(svg) {
+            svg.append("text")
+              .style("font", "bold 20px sans-serif")
+              .attr("text-anchor", "start")
+              .attr("x", 6)
+              .attr("y", height - 20)
+              .attr("dy", "0.32em")
+              .text("Waste Cost Evolution Over Time");
+          }
+
+          // Initialize the title (static, no updates needed during animation)
+          chartTitle(svg);
+
+          return { svg, x, updateBars: bars(svg), updateAxis: axis(svg), updateLabels: labels(svg), updateTicker: ticker(svg) };
+        }
+
+        // Initialize the chart for the first time
+        let chart = initializeChart();
+        let animationController = null; // To store the resolve function for pausing
+
+        async function runAnimation() {
+          while (!stop) { // Check the stop flag to break the loop
+            if (!running) {
+              await new Promise(resolve => {
+                animationController = resolve; // Store the resolve function to resume later
+              });
+            }
+
+            if (currentFrame >= keyframes.length) {
+              currentFrame = 0;
+            }
+
+            const keyframe = keyframes[currentFrame];
+            const transition = chart.svg.transition()
+              .duration(duration)
+              .ease(d3.easeLinear);
+
+            chart.x.domain([0, d3.max(keyframe[1], d => d.value) || 1]);
+
+            chart.updateAxis(keyframe, transition);
+            chart.updateBars(keyframe, transition);
+            chart.updateLabels(keyframe, transition);
+            chart.updateTicker(keyframe, transition);
+
+            await transition.end();
+            currentFrame++;
+          }
+        }
+
+        // Start the animation
+        let animationPromise = runAnimation();
+
+        // Replay button functionality: Stop, reset, and restart the chart
+        d3.select("#replay").on("click", async () => {
+          stop = true; // Signal the current animation loop to stop
+          if (!running && animationController) {
+            animationController(); // Resolve the paused promise to let the loop exit
+          }
+          await animationPromise.catch(() => {}); // Wait for the current loop to finish
+
+          // Reset state
+          stop = false;
+          running = true;
+          currentFrame = 0;
+          chart = initializeChart(); // Reinitialize the chart (clears previous SVG)
+          animationPromise = runAnimation(); // Start a new animation loop
+        });
+
+        // Pause button functionality
+        d3.select("#pause").on("click", () => {
+          running = false;
+        });
+
+        // Play button functionality
+        d3.select("#play").on("click", () => {
+          if (!running) {
+            running = true;
+            if (animationController) {
+              animationController(); // Resume the animation by resolving the promise
+            }
+          }
+        });
+
+        return animationPromise;
+      } catch (err) {
+        console.error("Part3 error:", err.message);
+        d3.select("#error-message-part3").text(`Part 3 Error: ${err.message}`);
+      }
+    }
+
+    // Initialize both parts
+    initPart1();
+    createBarChartRace();
+  </script>
+</body>
+</html>
